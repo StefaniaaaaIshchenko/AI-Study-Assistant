@@ -1,0 +1,116 @@
+/* ============================================================
+   Сторінки входу та реєстрації — білі картки на темному фоні
+   з тими ж акцентами (фіолетовий / малиновий / помаранчевий)
+   ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;600&display=swap");
+
+:root {
+  --violet: #7a4dff;
+  --magenta: #d63fa6;
+  --orange: #ff7a2f;
+  --ink: #1d1838;
+  --muted: #6f6a8c;
+  --grad: linear-gradient(120deg, var(--violet), var(--magenta) 60%, var(--orange));
+}
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  font-family: "Manrope", system-ui, sans-serif;
+  color: var(--ink);
+  background: #0c0919;
+  position: relative;
+  overflow-x: hidden;
+}
+/* м'який темний фон з кольоровими плямами */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(120px);
+  animation: float 20s ease-in-out infinite alternate;
+}
+body::before { width: 60vw; height: 60vw; left: -15vw; top: -20vw; background: var(--violet); opacity: .5; }
+body::after  { width: 45vw; height: 45vw; right: -12vw; bottom: -15vw; background: var(--orange); opacity: .32; animation-delay: -8s; }
+@keyframes float { to { transform: translate(6vw, 5vh) scale(1.15); } }
+
+main {
+  width: 100%;
+  max-width: 440px;
+  padding: 44px 36px 36px;
+  border-radius: 32px;
+  background: #fbfaff;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .6) inset;
+  text-align: center;
+  animation: rise .7s cubic-bezier(.2, .8, .2, 1) both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } }
+
+/* логотип-кружечок */
+main::before {
+  content: "";
+  display: block;
+  width: 72px; height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: var(--grad);
+  box-shadow: 0 10px 30px -6px rgba(214, 63, 166, .55);
+  -webkit-mask: none;
+}
+.brand { margin: 0 0 4px; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h2 { margin: 0 0 6px; font-family: "Unbounded", "Manrope", sans-serif; font-size: 28px; font-weight: 600; letter-spacing: -.02em; }
+.subtitle { margin: 0 0 26px; color: var(--muted); }
+
+form { text-align: left; }
+label { display: block; margin: 0 0 6px 4px; font-size: 14px; font-weight: 700; }
+
+.field { position: relative; margin-bottom: 18px; }
+.field svg {
+  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; stroke: #8b86a8; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  pointer-events: none;
+}
+input {
+  width: 100%;
+  padding: 15px 16px 15px 48px;
+  font: 500 15px "Manrope", sans-serif;
+  color: var(--ink);
+  background: #fff;
+  border: 1.5px solid #e6e2f5;
+  border-radius: 16px;
+  box-shadow: 0 4px 14px -8px rgba(60, 40, 140, .25);
+  transition: border-color .2s, box-shadow .2s;
+}
+input::placeholder { color: #a8a3c0; }
+input:focus { outline: none; border-color: var(--violet); box-shadow: 0 0 0 4px rgba(122, 77, 255, .16); }
+.field:focus-within svg { stroke: var(--violet); }
+
+button[type="submit"] {
+  width: 100%;
+  margin-top: 8px;
+  padding: 16px;
+  font: 700 16px "Manrope", sans-serif;
+  color: #fff;
+  background: var(--grad);
+  background-size: 160% 100%;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 14px 30px -10px rgba(214, 63, 166, .6);
+  transition: transform .2s, background-position .4s;
+}
+button[type="submit"]:hover { transform: translateY(-2px); background-position: 100% 0; }
+
+.switch { margin: 22px 0 0; text-align: center; color: var(--muted); }
+.switch a { color: var(--violet); font-weight: 700; text-decoration: none; }
+.switch a:hover { text-decoration: underline; }
+.back { display: inline-block; margin-top: 14px; font-size: 13px; color: var(--muted); text-decoration: none; }
+.back:hover { color: var(--orange); }
+
+@media (max-width: 480px) { main { padding: 36px 22px 28px; border-radius: 26px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }

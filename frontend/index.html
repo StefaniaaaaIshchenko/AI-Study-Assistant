@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Study Assistant</title>
+
+    <link rel="stylesheet" href="style.css?v=5">
+    <script src="script.js" defer></script>
+    <script src="intro.js?v=5" defer></script>
+</head>
+
+<body>
+
+    <!-- Анімований фон -->
+    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+    <!-- Вступ: відео, яке гортається скролом -->
+    <div class="intro" id="intro">
+        <div class="intro-stage">
+            <video id="introVideo" muted playsinline preload="auto"
+                   data-src="https://res.cloudinary.com/otu1ebpt/video/upload/v1793911926/Books_falling_and_stacking_up_061a76a0_t0-6.7_1080p.mp4"></video>
+            <div class="intro-shade"></div>
+
+            <div class="intro-copy" id="introCopy">
+                <h2>Вчись швидше, з AI поруч</h2>
+                <p>Скроль вниз і заходь.</p>
+            </div>
+
+            <div class="scroll-hint" id="scrollHint" aria-hidden="true"><span></span></div>
+            <button type="button" class="ghost intro-skip" id="introSkip">Пропустити</button>
+        </div>
+    </div>
+
+    <!-- Верхня панель -->
+    <header>
+        <h1><span></span>AI Study Assistant</h1>
+
+        <nav>
+            <a href="#" onclick="window.scrollTo({top:0});return false;">Головна</a>
+            <a href="#materials">Матеріали</a>
+            <a href="#helper">AI-помічник</a>
+            <a href="#plan">План навчання</a>
+        </nav>
+
+        <div class="auth">
+            <button type="button" class="ghost"
+                onclick="window.location.href='login.html'">
+                Увійти
+            </button>
+
+            <button type="button"
+                onclick="window.location.href='register.html'">
+                Зареєструватися
+            </button>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- Як це працює -->
+        <section class="s-how">
+            <h2>Як це працює</h2>
+            <ol class="steps">
+                <li><strong>Завантаж матеріали</strong>PDF з лекцій, конспектів або підручника.</li>
+                <li><strong>Обери рівень і дію</strong>Поясни тему, зроби конспект, флеш-картки або тест.</li>
+                <li><strong>Навчайся за планом</strong>Створи план або підготуйся до іспиту.</li>
+            </ol>
+        </section>
+
+        <!-- Навчальні матеріали -->
+        <section class="s-materials" id="materials">
+            <h2>Навчальні матеріали</h2>
+
+            <input type="file" accept=".pdf">
+            <button type="button">Завантажити матеріали</button>
+
+            <div>
+                <h3>Мої матеріали</h3>
+            </div>
+        </section>
+
+        <!-- AI-помічник -->
+        <section class="s-helper" id="helper">
+            <h2>AI-помічник</h2>
+
+            <div class="level">
+                <label for="difficulty">Обери рівень складності:</label>
+                <select id="difficulty">
+                    <option value="beginner">Початковий</option>
+                    <option value="medium">Середній</option>
+                    <option value="advanced">Просунутий</option>
+                </select>
+            </div>
+
+            <button type="button">Пояснити тему</button>
+            <button type="button">Згенерувати конспект</button>
+            <button type="button">Згенерувати флеш-картки</button>
+            <button type="button">Згенерувати тест</button>
+
+            <div id="aiResult"></div>
+
+            <div class="ask-box">
+                <textarea id="question" placeholder="Або постав своє запитання: що саме тобі незрозуміло?"></textarea>
+                <button class="send-button" type="button">☞</button>
+            </div>
+
+            <div id="answer"></div>
+        </section>
+
+        <!-- Тестування -->
+        <section id="quiz-section" hidden>
+            <h2>Тести</h2>
+
+            <div id="quiz"></div>
+
+            <button id="finish-quiz" type="button">
+                Завершити тест
+            </button>
+
+            <div id="quiz-result"></div>
+        </section>
+
+        <!-- Результати тестування -->
+        <section id="result-section" hidden>
+            <h3>Результат тесту</h3>
+
+            <p>
+                Кількість правильних відповідей:
+                <span id="correct">0</span>
+            </p>
+
+            <p>
+                Результат:
+                <span id="score">0%</span>
+            </p>
+        </section>
+
+        <!-- Флеш-картки -->
+        <section id="flashcard-section" hidden>
+            <h2>Флеш-картки</h2>
+
+            <div id="flashcard"></div>
+        </section>
+
+        <!-- Персональний план навчання -->
+        <section class="s-plan" id="plan">
+            <h2>Персональний план навчання</h2>
+
+            <p class="hint">План складемо на основі матеріалів із розділу «Навчальні матеріали».</p>
+
+            <input
+                type="text"
+                id="subjects"
+                placeholder="Які предмети вчиш? Наприклад: програмування, математика, біологія"
+            >
+
+            <div class="plan-actions">
+                <button type="button">Створити план навчання</button>
+                <button type="button" class="ghost">Підготувати до іспиту</button>
+            </div>
+
+            <div id="studyplan"></div>
+        </section>
+
+        <!-- Прогрес -->
+        <section class="s-progress">
+            <h2>Мій прогрес</h2>
+
+            <p>Пройдено тестів: <span>0</span></p>
+            <p>Середній результат: <span>0%</span></p>
+        </section>
+
+    </main>
+
+    <!-- Футер -->
+    <footer>
+        <div class="footer-grid">
+            <div>
+                <h3>AI Study Assistant</h3>
+                <p>Персональний помічник для навчання: пояснення, конспекти, флеш-картки та тести.</p>
+            </div>
+            <div>
+                <h3>Контакти</h3>
+                <ul>
+                    <li><a href="mailto:stefania.ishchenko@gmail.com">stefania.ishchenko@gmail.com</a></li>
+                    <li><a href="tel:+380000000000">+38 (066) 287-82-89</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3>Соцмережі</h3>
+                <ul>
+                    <li><a href="#">Instagram</a></li>
+                    <li><a href="#">Telegram</a></li>
+                </ul>
+            </div>
+            <div>
+                <h3>Локація</h3>
+                <p>Україна, м. Львів<br></p>
+            </div>
+        </div>
+        <div class="copyright">© 2026 AI Study Assistant. Усі права захищено.</div>
+    </footer>
+
+</body>
+</html>

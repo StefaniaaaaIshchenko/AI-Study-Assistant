@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Реєстрація — AI Study Assistant</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+    <main>
+        <p class="brand">AI Study Assistant</p>
+        <h2>Створи акаунт</h2>
+        <p class="subtitle">Реєстрація займе хвилину, і можна вчитися</p>
+
+        <form id="register-form">
+            <label for="name">Ім'я</label>
+            <div class="field"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><input type="text" id="name" name="name" placeholder="Як тебе звати?" required></div>
+            <label for="email">Email</label>
+            <div class="field"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg><input type="email" id="email" name="email" placeholder="you@example.com" required></div>
+            <label for="password">Пароль</label>
+            <div class="field"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><input type="password" id="password" name="password" placeholder="Придумай пароль" required></div>
+            <label for="confirm-password">Підтвердження пароля</label>
+            <div class="field"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="3"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><input type="password" id="confirm-password" name="confirm-password" placeholder="Повтори пароль" required></div>
+            <button type="submit">Зареєструватися</button>
+        </form>
+
+        <p class="switch">Вже маєш акаунт? <a href="login.html">Увійти</a></p>
+        <a class="back" href="index.html">← На головну</a>
+    </main>
+    <script src="register.js"></script>
+</body>
+</html>
