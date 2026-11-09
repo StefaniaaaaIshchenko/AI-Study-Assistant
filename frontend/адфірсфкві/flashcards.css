@@ -1,0 +1,64 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;600&display=swap");
+:root{--violet:#7a4dff;--magenta:#d63fa6;--orange:#ff7a2f;--ink:#1d1838;--muted:#8d88aa;--paper:#fbfaff;--grad:linear-gradient(120deg,var(--violet),var(--magenta) 60%,var(--orange))}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:"Manrope",system-ui,sans-serif;color:#efeaff;background:#0c0919;overflow-x:hidden}
+body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(120px)}
+body::before{width:55vw;height:55vw;left:-15vw;top:-20vw;background:var(--violet);opacity:.45}
+body::after{width:40vw;height:40vw;right:-10vw;bottom:-15vw;background:var(--orange);opacity:.28}
+button,select,input,textarea{font:inherit}
+button{cursor:pointer;border:0;border-radius:999px;padding:12px 22px;font-weight:700;color:#fff;background:var(--grad);box-shadow:0 10px 24px -10px rgba(214,63,166,.7)}
+button.ghost{background:rgba(255,255,255,.08);box-shadow:none;border:1px solid rgba(255,255,255,.18)}
+button.round{width:52px;height:52px;padding:0;font-size:26px;line-height:1}
+button:focus-visible,select:focus-visible,.carousel:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 28px}
+.bar h1{margin:0;font:600 20px "Unbounded",sans-serif}
+.back{color:var(--muted);text-decoration:none}.back:hover{color:var(--orange)}
+main{max-width:1100px;margin:0 auto;padding:0 20px 60px}
+.gen{max-width:760px;margin:12px auto 0;display:grid;gap:12px}
+textarea,.gen select,dialog select,dialog input{width:100%;padding:14px 16px;border-radius:16px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:inherit}
+textarea::placeholder,dialog input::placeholder{color:#a8a3c0}
+option{color:#1d1838}
+.gen-row{display:grid;grid-template-columns:1fr 90px auto;gap:10px}
+#status{min-height:24px;text-align:center;color:var(--muted)}
+#status.err{color:#ff9a9a}
+
+.deck-title{display:flex;justify-content:space-between;max-width:760px;margin:18px auto 0;font:600 15px "Unbounded",sans-serif}
+#counter{color:var(--muted);font-family:"Manrope"}
+
+/* карусель: центральна картка велика, сусідні нахилені й розмиті */
+.carousel{position:relative;height:460px;margin:10px 0;perspective:1400px;touch-action:pan-y;user-select:none}
+.card{position:absolute;left:50%;top:0;width:min(420px,78vw);height:420px;margin-left:calc(min(420px,78vw)/-2);transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .4s,filter .4s;cursor:pointer}
+.card .in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.card.flip .in{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;border-radius:26px;background:var(--paper);color:var(--ink);padding:26px 28px;display:flex;flex-direction:column;box-shadow:0 30px 60px -24px rgba(0,0,0,.7)}
+.face.back{transform:rotateY(180deg)}
+.tag{align-self:flex-start;padding:5px 12px;border-radius:8px;background:#efeaff;color:var(--violet);font-size:12px;font-weight:700}
+.pic{flex:1;display:grid;place-items:center;font-size:88px;line-height:1}
+.pic img{max-width:100%;max-height:190px;border-radius:14px}
+.term{font:600 26px/1.25 "Unbounded","Manrope",sans-serif;text-align:center;margin:0 0 6px;overflow-wrap:anywhere}
+.term.formula{font-family:"Manrope",serif;font-style:italic;font-size:30px}
+.sub{text-align:center;color:var(--muted);font-size:14px;margin:0}
+.def{font-size:18px;line-height:1.55;margin:16px 0 0}
+.hint{margin-top:auto;padding:12px 14px;border-radius:14px;background:linear-gradient(120deg,#f1ebff,#ffeede);font-size:14px;line-height:1.45}
+.hint b{color:var(--magenta)}
+.card[data-o="0"]{z-index:5}
+.card:not([data-o="0"]) .face{pointer-events:none}
+.card:not([data-o="0"]) .in{transform:none}
+.controls{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px;margin-top:8px}
+.tip{text-align:center;color:var(--muted);font-size:13px}
+
+dialog{width:min(480px,92vw);border:0;border-radius:26px;padding:28px;background:var(--paper);color:var(--ink);box-shadow:0 40px 90px -20px rgba(0,0,0,.8)}
+dialog::backdrop{background:rgba(12,9,25,.7);backdrop-filter:blur(4px)}
+dialog h2{margin:0 0 16px;font:600 22px "Unbounded",sans-serif}
+dialog label{display:block;margin:14px 0 6px 4px;font-weight:700;font-size:14px}
+dialog select,dialog input{background:#fff;border-color:#e6e2f5;color:var(--ink)}
+.dlg-actions,.dlg-head{display:flex;justify-content:space-between;gap:10px;margin-top:20px}
+.dlg-head{margin:0 0 12px;align-items:center}.dlg-head h2{margin:0}
+dialog .ghost{color:var(--ink);border-color:#d9d4ee;background:#f1eefb}
+.msg{min-height:20px;color:var(--muted);font-size:14px}.msg.err{color:#c0392b}
+#colList{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+#colList li{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;background:#fff;border:1px solid #e6e2f5}
+#colList .name{flex:1;font-weight:700}#colList small{color:var(--muted);font-weight:500;display:block}
+#colList button{padding:8px 16px;font-size:14px}
+@media (max-width:600px){.gen-row{grid-template-columns:1fr 80px}.gen-row button{grid-column:1/-1}.carousel{height:440px}.card{height:400px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
