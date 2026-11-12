@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Флеш-картки — AI Study Assistant</title>
+    <link rel="stylesheet" href="flashcards.css">
+    <script src="flashcards.js" defer></script>
+</head>
+<body>
+    <header class="bar">
+        <a class="back" href="index.html">← На головну</a>
+        <div class="bar-title">
+            <h1 id="setTitle">Створюю картки…</h1>
+            <p id="setMeta"></p>
+        </div>
+        <button type="button" class="ghost" id="openCollections">Мої колекції</button>
+    </header>
+
+    <main>
+        <p id="status" role="status"></p>
+
+        <section class="stage" id="stage" aria-label="Флеш-картки" hidden>
+            <div class="deck" id="deck"></div>
+            <span class="drag-hint">‹ › Перетягніть</span>
+        </section>
+
+        <div class="controls" id="controls" hidden>
+            <button type="button" class="round" id="prev" aria-label="Попередня картка">‹</button>
+            <span id="counter">1 / 1</span>
+            <button type="button" class="round" id="next" aria-label="Наступна картка">›</button>
+        </div>
+
+        <div class="actions" id="actions" hidden>
+            <button type="button" class="ghost" id="shuffle">Перемішати</button>
+            <button type="button" class="ghost" id="regen">Згенерувати нові</button>
+            <button type="button" id="saveBtn">Зберегти в колекцію</button>
+        </div>
+    </main>
+
+    <!-- Збереження -->
+    <dialog id="saveDialog">
+        <form method="dialog" id="saveForm">
+            <h2>Зберегти в колекцію</h2>
+            <label for="colSelect">Колекція</label>
+            <select id="colSelect"></select>
+            <div id="newColWrap" hidden>
+                <label for="newColName">Назва нової колекції</label>
+                <input type="text" id="newColName" maxlength="120" placeholder="Наприклад: Біологія — клітина">
+            </div>
+            <p id="saveMsg" role="status"></p>
+            <div class="dlg-actions">
+                <button type="button" class="ghost" id="saveCancel">Скасувати</button>
+                <button type="submit" id="saveConfirm">Зберегти</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Мої колекції -->
+    <dialog id="colDialog">
+        <h2>Мої колекції</h2>
+        <ul id="colList"></ul>
+        <p id="colMsg" role="status"></p>
+        <div class="dlg-actions"><button type="button" class="ghost" id="colClose">Закрити</button></div>
+    </dialog>
+</body>
+</html>

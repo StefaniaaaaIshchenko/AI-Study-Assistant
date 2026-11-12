@@ -5,3 +5,4 @@
 backend/database.php
 __pycache__/
 *.pyc
+backend/config.php

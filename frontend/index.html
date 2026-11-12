@@ -8,7 +8,7 @@
     <title>AI Study Assistant</title>
 
     <link rel="stylesheet" href="style.css?v=5">
-    <script src="script.js" defer></script>
+    <script src="App.js" defer></script>
     <script src="intro.js?v=5" defer></script>
 </head>
 
@@ -104,7 +104,7 @@
 
             <div class="ask-box">
                 <textarea id="question" placeholder="Або постав своє запитання: що саме тобі незрозуміло?"></textarea>
-                <button class="send-button" type="button">☞</button>
+                <button class="send-button"  id="askBtn" type="button">☞</button>
             </div>
 
             <div id="answer"></div>
@@ -169,10 +169,32 @@
         <section class="s-progress">
             <h2>Мій прогрес</h2>
 
-            <p>Пройдено тестів: <span>0</span></p>
-            <p>Середній результат: <span>0%</span></p>
+            <p>Пройдено тестів: <span id="testsDone">0</span></p>
+            <p>Середній результат: <spaт id="testsAvg">0%</span></p>
         </section>
+        <!-- Оцінка сайту -->
+        <section class="s-rating">
+            <h2>Оціни сайт</h2>
 
+            <div id="stars">
+                <button type="button" data-v="1">★</button>
+                <button type="button" data-v="2">★</button>
+                <button type="button" data-v="3">★</button>
+                <button type="button" data-v="4">★</button>
+                <button type="button" data-v="5">★</button>
+            </div>
+
+            <textarea id="rateComment"
+                placeholder="Залиш відгук..."></textarea>
+
+            <button type="button" id="rateSend">
+                Надіслати оцінку
+            </button>
+
+            <p id="rateMsg"></p>
+            <p id="rateSummary"></p>
+            <ul id="rateList"></ul>
+        </section>
     </main>
 
     <!-- Футер -->

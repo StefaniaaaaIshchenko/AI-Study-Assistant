@@ -9,13 +9,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const password = document.getElementById("password").value;
 
         try {
-            const response = await fetch("../backend/login.php", {
+            const response = await fetch("../backend/api.php", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
                 credentials: "same-origin",
-                body: JSON.stringify({
+                body: JSON.stringify({ action: "login",
                     email: email,
                     password: password
                 })
