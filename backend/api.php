@@ -1,5 +1,6 @@
 <?php
 // Єдина точка входу для всього нового функціоналу: POST JSON {"action": "...", ...}
+set_time_limit(120);
 session_start();
 header("Content-Type: application/json; charset=UTF-8");
 
@@ -14,23 +15,55 @@ function throttle() {   // захист ключа: не частіше ніж �
     $now = microtime(true);
     if (isset($_SESSION["last_ai"]) && $now - $_SESSION["last_ai"] < 3) out(429, ["success" => false, "message" => "Зачекай кілька секунд і спробуй ще раз"]);
     $_SESSION["last_ai"] = $now;
+    session_write_close();   // звільняємо сесію: поки AI думає, інші запити користувача не чекають
 }
-function openai($system, $user, $json = false, $max = 2500) {
+function openai($system, $user, $json = false, $max = 2500) {   // універсальний виклик AI: OpenAI, Gemini або Groq (OpenAI-сумісний формат)
     $cfg = require __DIR__ . "/config.php";
-    if (empty($cfg["openai_key"])) out(500, ["success" => false, "message" => "На сервері не налаштований API-ключ"]);
-    $payload = ["model" => $cfg["model"], "max_completion_tokens" => $max,
+    $providers = [   // адреса API, модель за замовчуванням, назва ключа в config.php
+        "openai" => ["https://api.openai.com/v1/chat/completions", "gpt-4o-mini", "openai_key"],
+        "gemini" => ["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-flash-lite-latest", "gemini_key"],
+        "groq"   => ["https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile", "groq_key"],
+    ];
+    $prov = $cfg["provider"] ?? "openai";
+    if (!isset($providers[$prov])) $prov = "openai";
+    [$url, $defModel, $keyName] = $providers[$prov];
+    $key = $cfg[$keyName] ?? "";
+    $model = $cfg[$prov . "_model"] ?? ($prov === "openai" ? ($cfg["model"] ?? $defModel) : $defModel);
+    if (empty($key)) out(500, ["success" => false, "message" => "На сервері не налаштований API-ключ"]);
+    $payload = ["model" => $model,
         "messages" => [["role" => "system", "content" => $system], ["role" => "user", "content" => $user]]];
+    if ($prov === "openai") $payload["max_completion_tokens"] = $max;
+    else $payload["max_tokens"] = $prov === "gemini" ? $max * 4 : $max;   // Gemini витрачає частину токенів на «роздуми»
     if ($json) $payload["response_format"] = ["type" => "json_object"];
-    $ch = curl_init("https://api.openai.com/v1/chat/completions");
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 90,
-        CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $cfg["openai_key"]],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE)]);
-    $raw = curl_exec($ch); $st = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
-    if ($raw === false || $st !== 200) { error_log("OpenAI $st: " . substr((string)$raw, 0, 300)); 
-        $msg = $st === 429 && strpos((string)$raw, "insufficient_quota") !== false ? "На API-ключі OpenAI закінчився баланс. Поповни рахунок на platform.openai.com."
-             : ($st === 429 ? "AI перевантажений. Спробуй за хвилину." : ($st === 401 ? "Недійсний API-ключ OpenAI." : "AI зараз недоступний. Спробуй ще раз."));
-        out(502, ["success" => false, "message" => $msg]); }
-    return json_decode($raw, true)["choices"][0]["message"]["content"] ?? "";
+    // Модель + резервна: якщо основна перевантажена (503) або недоступна (404) — пробуємо легшу
+    $models = [$model];
+    if ($prov === "gemini" && !isset($cfg["gemini_model"])) $models[] = "gemini-3.1-flash-lite";
+    $t0 = microtime(true);
+    foreach ($models as $m) {
+        $payload["model"] = $m;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $key],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE)]);
+        $raw = curl_exec($ch); $st = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
+        if ($raw !== false && $st === 200) break;
+        if (!in_array($st, [503, 404]) || microtime(true) - $t0 > 12) break;   // інші помилки або вже довго — не повторюємо
+    }
+    if ($raw === false || $st !== 200) { error_log("AI($prov) $st $err: " . substr((string)$raw, 0, 300));
+        $r = (string)$raw;
+        if ($st === 429 && strpos($r, "insufficient_quota") !== false) $msg = "На API-ключі закінчився баланс. Поповни рахунок або перемкнись на інший сервіс у config.php.";
+        elseif ($st === 429) $msg = "Вичерпано ліміт запитів до AI. Спробуй за хвилину (або завтра, якщо скінчився денний ліміт).";
+        elseif ($st === 503) $msg = "AI зараз перевантажений. Спробуй ще раз за хвилину.";
+        elseif ($st === 0) $msg = "AI відповідає занадто довго. Спробуй коротшу тему або ще раз.";
+        elseif ($st === 401 || $st === 403 || ($st === 400 && stripos($r, "API key") !== false)) $msg = "Недійсний API-ключ. Перевір config.php.";
+        else $msg = "AI зараз недоступний. Спробуй ще раз.";
+        $resp = ["success" => false, "message" => $msg];
+        if (in_array($_SERVER["SERVER_NAME"] ?? "", ["localhost", "127.0.0.1"])) $resp["debug"] = "$prov {$payload['model']} $st $err " . substr($r, 0, 400);   // деталі лише локально
+        out(502, $resp); }
+    $d = json_decode($raw, true);
+    $text = $d["choices"][0]["message"]["content"] ?? "";
+    if ($json) $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($text));   // деякі моделі обгортають JSON у ```
+    return $text;
 }
 
 // Текст завантаженого матеріалу користувача, який додається до запиту в AI як контекст
@@ -82,7 +115,6 @@ if ($action === "" && !empty($_SERVER["PATH_INFO"])) $action = trim($_SERVER["PA
 if ($_SERVER["REQUEST_METHOD"] !== "POST") out(405, ["success" => false, "message" => "Метод не дозволений"]);
 
 switch ($action) {
-
 case "register": {
     $name = mb_substr(trim($in["name"] ?? ""), 0, 100); $email = trim($in["email"] ?? ""); $pass = (string)($in["password"] ?? "");
     if ($name === "" || $email === "" || $pass === "") out(400, ["success" => false, "message" => "Заповніть усі поля"]);
