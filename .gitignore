@@ -2,9 +2,9 @@
 .env
 .env.*
 !.env.example
-backend/database.php
 __pycache__/
 *.pyc
-backend/config.php
+config.php
+backend/database.php
 backend/db_hosting.php
 .backup_claude/
