@@ -125,9 +125,9 @@
     show(false); $("setTitle").textContent = "Створюю картки…"; $("setMeta").textContent = req.topic;
     status("AI готує картки за темою «" + req.topic + "». Це займе кілька секунд.");
     try {
-      const { ok, data } = await post(API, { action: "flashcards", topic: req.topic, level: req.level, count: 10 });
+      const { ok, data } = await post(API, { action: "flashcards", topic: req.topic, level: req.level, count: 10, material_id: req.material_id || 0 });
       if (!ok) throw new Error(data.message || "Помилка генерації");
-      set = { title: data.title, topic: req.topic, level: req.level, cards: data.cards };
+      set = { title: data.title, topic: req.topic, level: req.level, material_id: req.material_id || 0, cards: data.cards };
       sessionStorage.setItem("fcSet", JSON.stringify(set));
       status(""); render();
     } catch (e) {
@@ -207,7 +207,7 @@
   /* ---------- Старт ---------- */
   const req = JSON.parse(sessionStorage.getItem("fcRequest") || "null");
   const cached = JSON.parse(sessionStorage.getItem("fcSet") || "null");
-  if (req && cached && cached.topic === req.topic && cached.cards?.length) { set = cached; render(); }
+  if (req && cached && cached.topic === req.topic && (cached.material_id || 0) === (req.material_id || 0) && cached.cards?.length) { set = cached; render(); }
   else if (req) generate(req);
   else {
     $("setTitle").textContent = "Тему ще не вказано";

@@ -6,3 +6,5 @@ backend/database.php
 __pycache__/
 *.pyc
 backend/config.php
+backend/db_hosting.php
+.backup_claude/

@@ -7,9 +7,9 @@
 
     <title>AI Study Assistant</title>
 
-    <link rel="stylesheet" href="style.css?v=5">
-    <script src="App.js" defer></script>
-    <script src="intro.js?v=5" defer></script>
+    <link rel="stylesheet" href="style.css?v=7">
+        <script src="App.js?v=9" defer></script>
+        <script src="intro.js?v=6" defer></script>
 </head>
 
 <body>
@@ -45,7 +45,7 @@
             <a href="#plan">План навчання</a>
         </nav>
 
-        <div class="auth">
+        <div class="auth" id="authBox">
             <button type="button" class="ghost"
                 onclick="window.location.href='login.html'">
                 Увійти
@@ -74,11 +74,18 @@
         <section class="s-materials" id="materials">
             <h2>Навчальні матеріали</h2>
 
-            <input type="file" accept=".pdf">
-            <button type="button">Завантажити матеріали</button>
+            <p class="hint">PDF або TXT до 20 МБ. Текст із файлу зберігається у твоєму акаунті, і AI-помічник може спиратися на нього.</p>
+
+            <div class="mat-upload">
+                <input type="file" id="matFile" accept=".pdf,.txt,application/pdf,text/plain">
+                <button type="button" id="matUpload">Завантажити матеріали</button>
+            </div>
+            <p id="matMsg" role="status"></p>
 
             <div>
                 <h3>Мої матеріали</h3>
+                <p class="hint">Обери матеріал, і пояснення, конспект, тест, картки та план будуть складені за ним.</p>
+                <ul id="matList" class="mat-list"></ul>
             </div>
         </section>
 
@@ -94,6 +101,8 @@
                     <option value="advanced">Просунутий</option>
                 </select>
             </div>
+
+            <p class="hint mat-using" id="matUsing">Матеріал не обрано: AI відповідає за темою з поля нижче.</p>
 
             <button type="button">Пояснити тему</button>
             <button type="button">Згенерувати конспект</button>
@@ -120,7 +129,6 @@
                 Завершити тест
             </button>
 
-            <div id="quiz-result"></div>
         </section>
 
         <!-- Результати тестування -->
@@ -136,13 +144,6 @@
                 Результат:
                 <span id="score">0%</span>
             </p>
-        </section>
-
-        <!-- Флеш-картки -->
-        <section id="flashcard-section" hidden>
-            <h2>Флеш-картки</h2>
-
-            <div id="flashcard"></div>
         </section>
 
         <!-- Персональний план навчання -->
@@ -170,7 +171,8 @@
             <h2>Мій прогрес</h2>
 
             <p>Пройдено тестів: <span id="testsDone">0</span></p>
-            <p>Середній результат: <spaт id="testsAvg">0%</span></p>
+            <p>Середній результат: <span id="testsAvg">0%</span></p>
+            <p class="hint" id="progressHint">Увійди в акаунт, щоб бачити свій прогрес.</p>
         </section>
         <!-- Оцінка сайту -->
         <section class="s-rating">
@@ -208,7 +210,7 @@
                 <h3>Контакти</h3>
                 <ul>
                     <li><a href="mailto:stefania.ishchenko@gmail.com">stefania.ishchenko@gmail.com</a></li>
-                    <li><a href="tel:+380000000000">+38 (066) 287-82-89</a></li>
+                    <li><a href="tel:+380662878289">+38 (066) 287-82-89</a></li>
                 </ul>
             </div>
             <div>

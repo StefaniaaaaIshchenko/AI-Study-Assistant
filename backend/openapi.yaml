@@ -1,0 +1,524 @@
+openapi: 3.0.3
+info:
+  title: AI Study Assistant API
+  version: 1.0.0
+  description: |
+    Серверна частина веб-додатку **AI Study Assistant** (PHP 8 + MySQL).
+
+    Усі дії обробляє один файл `backend/api.php`. Кожна дія — це `POST`-запит із JSON-тілом.
+    Дію можна вказати двома способами:
+    - у шляху: `POST api.php/login` (так працює ця документація);
+    - у тілі: `POST api.php` з `{"action": "login", ...}` (так працює сайт).
+
+    **Авторизація** — через PHP-сесію: після `login` сервер ставить cookie `PHPSESSID`,
+    і браузер надсилає її автоматично. Щоб спробувати захищені дії в Swagger UI,
+    спочатку виконай `login`.
+
+    **Коди відповідей:** 200/201 — успіх, 400 — некоректні дані, 401 — потрібен вхід,
+    404 — не знайдено, 405 — не POST, 409 — email зайнятий, 413 — завеликий матеріал,
+    429 — забагато AI-запитів (не частіше ніж раз на 3 с), 500 — помилка сервера, 502 — помилка OpenAI.
+servers:
+  - url: api.php
+    description: Поточний сервер (MAMP або хостинг)
+tags:
+  - name: Авторизація
+  - name: AI
+  - name: Матеріали
+  - name: Колекції
+  - name: Прогрес і оцінки
+
+paths:
+  /register:
+    post:
+      tags: [Авторизація]
+      summary: Реєстрація користувача
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 100, example: Стефанія }
+                email: { type: string, format: email, example: student@example.com }
+                password: { type: string, minLength: 8, example: StrongPass123 }
+      responses:
+        '201':
+          description: Користувача створено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Реєстрація успішна }
+                  user_id: { type: integer, example: 5 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Email уже зареєстрований
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /login:
+    post:
+      tags: [Авторизація]
+      summary: Вхід (створює сесію)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: student@example.com }
+                password: { type: string, example: StrongPass123 }
+      responses:
+        '200':
+          description: Вхід успішний, встановлено cookie PHPSESSID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Вхід успішний }
+                  user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Неправильна пошта або пароль
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /me:
+    post:
+      tags: [Авторизація]
+      summary: Поточний користувач
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200':
+          description: Статус сесії
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logged_in: { type: boolean }
+                  user: { $ref: '#/components/schemas/User' }
+
+  /logout:
+    post:
+      tags: [Авторизація]
+      summary: Вихід (знищує сесію)
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+
+  /ai:
+    post:
+      tags: [AI]
+      summary: Пояснення, конспект, тест, план, підготовка до іспиту, запитання
+      description: |
+        Звертається до OpenAI (gpt-4o-mini). Потрібна тема `topic` або матеріал `material_id`.
+        Для `mode = quiz` повертає `questions`, для інших режимів — `text`.
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [explain, summary, quiz, plan, exam, ask]
+                  example: explain
+                topic: { type: string, maxLength: 1500, example: Закон Ома }
+                level: { type: string, enum: [beginner, medium, advanced], default: medium }
+                material_id: { type: integer, description: 'id матеріалу як контекст (0 — без матеріалу)', example: 0 }
+      responses:
+        '200':
+          description: Відповідь AI
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  text: { type: string, description: 'Для explain, summary, plan, exam, ask' }
+                  questions:
+                    type: array
+                    description: Лише для quiz
+                    items: { $ref: '#/components/schemas/Question' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+        '502': { $ref: '#/components/responses/AiError' }
+
+  /flashcards:
+    post:
+      tags: [AI]
+      summary: Згенерувати набір флеш-карток
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                topic: { type: string, maxLength: 500, example: Клітина }
+                level: { type: string, enum: [beginner, medium, advanced], default: medium }
+                count: { type: integer, minimum: 4, maximum: 16, default: 10 }
+                material_id: { type: integer, example: 0 }
+      responses:
+        '200':
+          description: Набір карток
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  title: { type: string, example: Будова клітини }
+                  cards: { type: array, items: { $ref: '#/components/schemas/Card' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooMany' }
+        '502': { $ref: '#/components/responses/AiError' }
+
+  /mat_list:
+    post:
+      tags: [Матеріали]
+      summary: Список моїх матеріалів
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200':
+          description: Матеріали користувача
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  materials: { type: array, items: { $ref: '#/components/schemas/Material' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /mat_save:
+    post:
+      tags: [Матеріали]
+      summary: Зберегти матеріал (текст, витягнутий із PDF або TXT у браузері)
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, content]
+              properties:
+                name: { type: string, maxLength: 255, example: Лекція 3 — Закон Ома }
+                content: { type: string, minLength: 20, maxLength: 300000, example: 'Сила струму прямо пропорційна напрузі й обернено пропорційна опору.' }
+                pages: { type: integer, example: 1 }
+      responses:
+        '201':
+          description: Збережено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  material_id: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413':
+          description: Понад 300 000 символів
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /mat_delete:
+    post:
+      tags: [Матеріали]
+      summary: Видалити матеріал
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/MaterialId' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /col_list:
+    post:
+      tags: [Колекції]
+      summary: Мої колекції флеш-карток
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200':
+          description: Колекції з кількістю карток
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  collections:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        cards: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /col_get:
+    post:
+      tags: [Колекції]
+      summary: Відкрити колекцію
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/CollectionId' }
+      responses:
+        '200':
+          description: Картки колекції
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  title: { type: string }
+                  cards: { type: array, items: { $ref: '#/components/schemas/Card' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /col_save:
+    post:
+      tags: [Колекції]
+      summary: Зберегти картки в нову або існуючу колекцію
+      description: '`collection_id = 0` — створити нову з назвою `new_name` (якщо така назва вже є, картки додаються в неї).'
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cards]
+              properties:
+                collection_id: { type: integer, example: 0 }
+                new_name: { type: string, maxLength: 120, example: Фізика — електрика }
+                topic: { type: string, example: Закон Ома }
+                cards: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/Card' } }
+      responses:
+        '200':
+          description: Збережено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  collection_id: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /col_delete:
+    post:
+      tags: [Колекції]
+      summary: Видалити колекцію разом із картками
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/CollectionId' }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /progress_get:
+    post:
+      tags: [Прогрес і оцінки]
+      summary: Статистика тестів
+      security: [ { session: [] } ]
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200': { $ref: '#/components/responses/Progress' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /progress_save:
+    post:
+      tags: [Прогрес і оцінки]
+      summary: Зберегти результат тесту
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [correct, total]
+              properties:
+                correct: { type: integer, minimum: 0, example: 4 }
+                total: { type: integer, minimum: 1, maximum: 50, example: 5 }
+                topic: { type: string, example: Закон Ома }
+      responses:
+        '200': { $ref: '#/components/responses/Progress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /rating_get:
+    post:
+      tags: [Прогрес і оцінки]
+      summary: Оцінки сайту та останні відгуки (доступно без входу)
+      requestBody: { $ref: '#/components/requestBodies/Empty' }
+      responses:
+        '200': { $ref: '#/components/responses/Rating' }
+
+  /rating_save:
+    post:
+      tags: [Прогрес і оцінки]
+      summary: Поставити або змінити свою оцінку
+      security: [ { session: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stars]
+              properties:
+                stars: { type: integer, minimum: 1, maximum: 5, example: 5 }
+                comment: { type: string, maxLength: 500, example: Дуже зручно готуватися до іспиту }
+      responses:
+        '200': { $ref: '#/components/responses/Rating' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+      description: Cookie PHP-сесії, яку сервер встановлює після login
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: Повідомлення про помилку }
+    User:
+      type: object
+      properties:
+        id: { type: integer, example: 5 }
+        name: { type: string, example: Стефанія }
+        email: { type: string, example: student@example.com }
+    Material:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        pages: { type: integer }
+        chars: { type: integer, description: Кількість символів тексту }
+        created_at: { type: string, example: '2026-11-16 13:44:34' }
+    Card:
+      type: object
+      required: [front, back]
+      properties:
+        front: { type: string, example: Мітохондрія }
+        back: { type: string, example: Органела, що виробляє енергію (АТФ) }
+        hint: { type: string, example: Енергетична станція клітини }
+        emoji: { type: string, example: '⚡🔋' }
+        mnemonic: { type: string, example: Міто-ХОНДРІЯ — хондрія заряджає батарейку клітини }
+        image_query: { type: string, example: Mitochondrion }
+    Question:
+      type: object
+      properties:
+        q: { type: string, example: 'Яка формула закону Ома?' }
+        options: { type: array, minItems: 4, maxItems: 4, items: { type: string }, example: ['I = U / R', 'I = U · R', 'U = I / R', 'R = I · U'] }
+        correct: { type: integer, minimum: 0, maximum: 3, example: 0 }
+        explanation: { type: string }
+
+  requestBodies:
+    Empty:
+      content:
+        application/json:
+          schema: { type: object, example: {} }
+    MaterialId:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [material_id]
+            properties:
+              material_id: { type: integer, example: 1 }
+    CollectionId:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [collection_id]
+            properties:
+              collection_id: { type: integer, example: 1 }
+
+  responses:
+    Ok:
+      description: Успіх
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: true }
+    BadRequest:
+      description: Некоректні або неповні дані
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Потрібно увійти в акаунт
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Об'єкт не знайдено або він належить іншому користувачу
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooMany:
+      description: Забагато AI-запитів (ліміт — раз на 3 секунди)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    AiError:
+      description: Помилка OpenAI (закінчився баланс, недійсний ключ, перевантаження)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Progress:
+      description: Статистика тестів користувача
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean }
+              tests: { type: integer, example: 3 }
+              average: { type: integer, description: Середній відсоток правильних відповідей, example: 80 }
+    Rating:
+      description: Загальна оцінка сайту
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean }
+              count: { type: integer, example: 12 }
+              average: { type: number, example: 4.6 }
+              recent:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    stars: { type: integer }
+                    comment: { type: string }
+              mine:
+                nullable: true
+                type: object
+                properties:
+                  stars: { type: integer }
+                  comment: { type: string }

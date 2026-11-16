@@ -26,24 +26,59 @@ function openai($system, $user, $json = false, $max = 2500) {
         CURLOPT_HTTPHEADER => ["Content-Type: application/json", "Authorization: Bearer " . $cfg["openai_key"]],
         CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE)]);
     $raw = curl_exec($ch); $st = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
-    if ($raw === false || $st !== 200) { error_log("OpenAI $st: " . substr((string)$raw, 0, 300)); out(502, ["success" => false, "message" => "AI зараз недоступний. Спробуй ще раз."]); }
+    if ($raw === false || $st !== 200) { error_log("OpenAI $st: " . substr((string)$raw, 0, 300)); 
+        $msg = $st === 429 && strpos((string)$raw, "insufficient_quota") !== false ? "На API-ключі OpenAI закінчився баланс. Поповни рахунок на platform.openai.com."
+             : ($st === 429 ? "AI перевантажений. Спробуй за хвилину." : ($st === 401 ? "Недійсний API-ключ OpenAI." : "AI зараз недоступний. Спробуй ще раз."));
+        out(502, ["success" => false, "message" => $msg]); }
     return json_decode($raw, true)["choices"][0]["message"]["content"] ?? "";
 }
 
+// Текст завантаженого матеріалу користувача, який додається до запиту в AI як контекст
+function material_context($conn, $uid, $mid) {
+    if ($mid <= 0) return "";
+    $st = $conn->prepare("SELECT name, content FROM study_materials WHERE id = ? AND user_id = ?");
+    $st->bind_param("ii", $mid, $uid); $st->execute();
+    $m = $st->get_result()->fetch_assoc();
+    if (!$m) out(404, ["success" => false, "message" => "Матеріал не знайдено"]);
+    return "\n\n--- Навчальний матеріал «" . $m["name"] . "» (спирайся насамперед на нього) ---\n" . mb_substr($m["content"], 0, 15000);
+}
+
+// Довантажує відсутню колонку або розширює закоротку — щоб стара структура БД не ламала код
+function col_info($conn, $table, $col) {
+    $st = $conn->prepare("SELECT CHARACTER_MAXIMUM_LENGTH AS len FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+    $st->bind_param("ss", $table, $col); $st->execute();
+    return $st->get_result()->fetch_assoc();
+}
+function ensure_column($conn, $table, $col, $def, $minLen = 0) {
+    $c = col_info($conn, $table, $col);
+    if (!$c) $conn->query("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+    elseif ($minLen && $c["len"] !== null && (int)$c["len"] < $minLen) $conn->query("ALTER TABLE `$table` MODIFY `$col` $def");
+}
+
 // Таблиці створюються автоматично (один раз за сесію)
-if (empty($_SESSION["schema_ok"])) {
+if (($_SESSION["schema_v"] ?? 0) < 4) {
     foreach ([
         "CREATE TABLE IF NOT EXISTS Users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, password VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) CHARACTER SET utf8mb4",
         "CREATE TABLE IF NOT EXISTS collections (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, name VARCHAR(120) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX (user_id)) CHARACTER SET utf8mb4",
         "CREATE TABLE IF NOT EXISTS flashcards (id INT AUTO_INCREMENT PRIMARY KEY, collection_id INT NOT NULL, topic VARCHAR(255) NOT NULL, front TEXT NOT NULL, back TEXT NOT NULL, hint TEXT NULL, emoji VARCHAR(32) NULL, mnemonic TEXT NULL, image_query VARCHAR(120) NULL, FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE) CHARACTER SET utf8mb4",
         "CREATE TABLE IF NOT EXISTS quiz_results (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, topic VARCHAR(255) NULL, correct INT NOT NULL, total INT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX (user_id)) CHARACTER SET utf8mb4",
         "CREATE TABLE IF NOT EXISTS ratings (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, stars TINYINT NOT NULL, comment VARCHAR(500) NOT NULL DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_user (user_id)) CHARACTER SET utf8mb4",
+        "CREATE TABLE IF NOT EXISTS study_materials (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, name VARCHAR(255) NOT NULL, content MEDIUMTEXT NOT NULL, pages INT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX (user_id)) CHARACTER SET utf8mb4",
     ] as $sql) $conn->query($sql);
-    $_SESSION["schema_ok"] = true;
+    // приведення старих версій таблиць до структури, яку використовує код
+    ensure_column($conn, "collections", "name", "VARCHAR(120) NOT NULL", 120);
+    ensure_column($conn, "flashcards", "topic", "VARCHAR(255) NOT NULL DEFAULT ''");
+    ensure_column($conn, "flashcards", "hint", "TEXT NULL");
+    ensure_column($conn, "flashcards", "emoji", "VARCHAR(32) NULL", 32);
+    ensure_column($conn, "flashcards", "mnemonic", "TEXT NULL");
+    ensure_column($conn, "flashcards", "image_query", "VARCHAR(120) NULL");
+    $_SESSION["schema_v"] = 4;
 }
 
 $in = json_decode(file_get_contents("php://input"), true) ?: [];
 $action = $in["action"] ?? "";
+// Альтернативний виклик для Swagger/OpenAPI: POST api.php/<дія>, напр. api.php/login
+if ($action === "" && !empty($_SERVER["PATH_INFO"])) $action = trim($_SERVER["PATH_INFO"], "/");
 if ($_SERVER["REQUEST_METHOD"] !== "POST") out(405, ["success" => false, "message" => "Метод не дозволений"]);
 
 switch ($action) {
@@ -84,35 +119,40 @@ case "logout":
     out(200, ["success" => true]);
 
 case "ai": {   // explain | summary | quiz | plan | exam | ask
-    login_required(); throttle();
+    $uid = login_required();
     $mode = $in["mode"] ?? ""; $topic = trim($in["topic"] ?? "");
     $level = ["beginner" => "початковий", "medium" => "середній", "advanced" => "просунутий"][$in["level"] ?? ""] ?? "середній";
-    if ($topic === "" || mb_strlen($topic) > 1500) out(400, ["success" => false, "message" => "Впиши тему або запитання"]);
-    $base = "Ти AI-репетитор для студентів. Відповідай українською, чітко й структуровано, без вступів. Рівень складності: $level.";
+    $mat = material_context($conn, $uid, (int)($in["material_id"] ?? 0));
+    if (($topic === "" && $mat === "") || mb_strlen($topic) > 1500) out(400, ["success" => false, "message" => "Впиши тему або запитання чи обери матеріал"]);
+    if ($topic === "") $topic = "Опрацюй увесь навчальний матеріал нижче";
+    throttle();
+    $base = "Ти AI-репетитор для студентів. Відповідай українською, чітко й структуровано, без вступів. Не використовуй Markdown (символи **, #, ```): заголовки пиши звичайним текстом із нового рядка, списки — через «•» або нумерацію. Рівень складності: $level.";
     $prompts = [
         "explain" => "$base Поясни тему простими словами з прикладами та аналогіями.",
         "summary" => "$base Зроби стислий конспект теми: ключові поняття, тези, формули (якщо є), короткий підсумок.",
-        "plan"    => "$base Склади персональний план навчання на 2 тижні по днях для предметів/теми користувача: цілі, що вивчати, скільки часу, як перевіряти себе.",
+        "plan"    => "$base Якщо додано навчальний матеріал — побудуй план саме за його розділами. Склади персональний план навчання на 2 тижні по днях для предметів/теми користувача: цілі, що вивчати, скільки часу, як перевіряти себе.",
         "exam"    => "$base Підготуй користувача до іспиту: найімовірніші питання, ключові відповіді, типові помилки, порядок повторення за 3 дні.",
         "ask"     => "$base Дай точну відповідь на запитання користувача й за потреби короткий приклад.",
     ];
     if ($mode === "quiz") {
         $sys = "$base Створи тест із 5 питань за темою. Відповідай ЛИШЕ JSON: {\"questions\":[{\"q\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0,\"explanation\":\"...\"}]}, де correct — індекс правильного варіанта (0-3).";
-        $d = json_decode(openai($sys, "Тема: $topic", true, 3000), true);
+        $d = json_decode(openai($sys, "Тема: $topic$mat", true, 3000), true);
         $qs = array_values(array_filter($d["questions"] ?? [], fn($x) => !empty($x["q"]) && count($x["options"] ?? []) === 4 && isset($x["correct"]) && $x["correct"] >= 0 && $x["correct"] <= 3));
         if (!$qs) out(502, ["success" => false, "message" => "Не вдалося створити тест. Спробуй ще раз."]);
         out(200, ["success" => true, "questions" => $qs]);
     }
     if (!isset($prompts[$mode])) out(400, ["success" => false, "message" => "Невідома дія"]);
-    out(200, ["success" => true, "text" => trim(openai($prompts[$mode], $topic, false, 2000))]);
+    out(200, ["success" => true, "text" => trim(openai($prompts[$mode], $topic . $mat, false, 2000))]);
 }
 
 case "flashcards": {
-    login_required(); throttle();
+    $uid = login_required();
     $topic = trim($in["topic"] ?? "");
     $level = in_array($in["level"] ?? "", ["beginner", "medium", "advanced"]) ? $in["level"] : "medium";
     $count = max(4, min(16, (int)($in["count"] ?? 10)));
-    if ($topic === "" || mb_strlen($topic) > 500) out(400, ["success" => false, "message" => "Вкажи тему на головній сторінці"]);
+    $mat = material_context($conn, $uid, (int)($in["material_id"] ?? 0));
+    if (($topic === "" && $mat === "") || mb_strlen($topic) > 500) out(400, ["success" => false, "message" => "Вкажи тему на головній сторінці"]);
+    throttle();
     $sys = <<<TXT
 Ти створюєш навчальні флеш-картки. Відповідай ЛИШЕ валідним JSON-об'єктом.
 Формат: {"title":"коротка назва набору","cards":[{"front":"...","back":"...","hint":"...","emoji":"1-3 емодзі","mnemonic":"...","image_query":"..."}]}
@@ -124,7 +164,7 @@ case "flashcards": {
 - image_query — англійська назва конкретного реального предмета/поняття для фото у Вікіпедії (напр. "Mitochondrion"); порожній рядок, якщо картинка не допоможе (формули, абстракції).
 - hint — коротка підказка без розкриття відповіді.
 TXT;
-    $d = json_decode(openai($sys, "Тема: $topic\nРівень: $level\nКількість карток: $count", true, 4000), true);
+    $d = json_decode(openai($sys, "Тема: $topic\nРівень: $level\nКількість карток: $count$mat", true, 4000), true);
     if (!$d || empty($d["cards"]) || !is_array($d["cards"])) out(502, ["success" => false, "message" => "Не вдалося розібрати відповідь AI. Спробуй ще раз."]);
     $cards = [];
     foreach ($d["cards"] as $c) {
@@ -160,8 +200,14 @@ case "col_save": {
     if (!is_array($cards) || !$cards || count($cards) > 50) out(400, ["success" => false, "message" => "Немає карток для збереження"]);
     if ($cid === 0) {
         if ($newName === "") out(400, ["success" => false, "message" => "Введи назву колекції"]);
-        $st = $conn->prepare("INSERT INTO collections (user_id, name) VALUES (?, ?)");
-        $st->bind_param("is", $uid, $newName); $st->execute(); $cid = $st->insert_id;
+        $st = $conn->prepare("SELECT id FROM collections WHERE user_id = ? AND name = ?");   // така назва вже є — додаємо картки в неї
+        $st->bind_param("is", $uid, $newName); $st->execute();
+        $ex = $st->get_result()->fetch_assoc();
+        if ($ex) $cid = (int)$ex["id"];
+        else {
+            $st = $conn->prepare("INSERT INTO collections (user_id, name) VALUES (?, ?)");
+            $st->bind_param("is", $uid, $newName); $st->execute(); $cid = $st->insert_id;
+        }
     } else {
         $st = $conn->prepare("SELECT id FROM collections WHERE id = ? AND user_id = ?");
         $st->bind_param("ii", $cid, $uid); $st->execute();
@@ -170,7 +216,7 @@ case "col_save": {
     $st = $conn->prepare("INSERT INTO flashcards (collection_id, topic, front, back, hint, emoji, mnemonic, image_query) VALUES (?,?,?,?,?,?,?,?)");
     foreach ($cards as $c) {
         $f = (string)($c["front"] ?? ""); $b = (string)($c["back"] ?? ""); $h = (string)($c["hint"] ?? "");
-        $e = (string)($c["emoji"] ?? ""); $m = (string)($c["mnemonic"] ?? ""); $q = (string)($c["image_query"] ?? "");
+        $e = mb_substr((string)($c["emoji"] ?? ""), 0, 32); $m = (string)($c["mnemonic"] ?? ""); $q = mb_substr((string)($c["image_query"] ?? ""), 0, 120);
         if ($f === "" || $b === "") continue;
         $st->bind_param("isssssss", $cid, $topic, $f, $b, $h, $e, $m, $q); $st->execute();
     }
@@ -181,6 +227,34 @@ case "col_delete": {
     $uid = login_required(); $cid = (int)($in["collection_id"] ?? 0);
     $st = $conn->prepare("DELETE FROM collections WHERE id = ? AND user_id = ?");
     $st->bind_param("ii", $cid, $uid); $st->execute();
+    out(200, ["success" => true]);
+}
+
+case "mat_list": {
+    $uid = login_required();
+    $st = $conn->prepare("SELECT id, name, pages, CHAR_LENGTH(content) AS chars, created_at FROM study_materials WHERE user_id = ? ORDER BY created_at DESC");
+    $st->bind_param("i", $uid); $st->execute();
+    out(200, ["success" => true, "materials" => $st->get_result()->fetch_all(MYSQLI_ASSOC)]);
+}
+
+case "mat_save": {   // текст витягується з PDF у браузері, сюди приходить уже готовий текст
+    $uid = login_required();
+    $name = mb_substr(trim($in["name"] ?? ""), 0, 255); $content = trim((string)($in["content"] ?? ""));
+    $pages = max(0, (int)($in["pages"] ?? 0));
+    if ($name === "" || mb_strlen($content) < 20) out(400, ["success" => false, "message" => "У файлі не знайдено тексту"]);
+    if (mb_strlen($content) > 300000) out(413, ["success" => false, "message" => "Файл завеликий: максимум близько 300 000 символів тексту"]);
+    $st = $conn->prepare("SELECT COUNT(*) AS n FROM study_materials WHERE user_id = ?");
+    $st->bind_param("i", $uid); $st->execute();
+    if ($st->get_result()->fetch_assoc()["n"] >= 30) out(400, ["success" => false, "message" => "Можна зберігати до 30 матеріалів. Видали непотрібні."]);
+    $st = $conn->prepare("INSERT INTO study_materials (user_id, name, content, pages) VALUES (?,?,?,?)");
+    $st->bind_param("issi", $uid, $name, $content, $pages); $st->execute();
+    out(201, ["success" => true, "material_id" => $st->insert_id]);
+}
+
+case "mat_delete": {
+    $uid = login_required(); $mid = (int)($in["material_id"] ?? 0);
+    $st = $conn->prepare("DELETE FROM study_materials WHERE id = ? AND user_id = ?");
+    $st->bind_param("ii", $mid, $uid); $st->execute();
     out(200, ["success" => true]);
 }
 
@@ -210,6 +284,7 @@ case "rating_get": {
     }
     $s = $conn->query("SELECT COUNT(*) AS n, COALESCE(AVG(stars), 0) AS avg FROM ratings")->fetch_assoc();
     $recent = $conn->query("SELECT u.name, r.stars, r.comment FROM ratings r JOIN Users u ON u.id = r.user_id WHERE r.comment <> '' ORDER BY r.created_at DESC LIMIT 5")->fetch_all(MYSQLI_ASSOC);
+    foreach ($recent as &$r) $r["stars"] = (int)$r["stars"]; unset($r);
     $mine = null;
     if (!empty($_SESSION["user_id"])) {
         $st = $conn->prepare("SELECT stars, comment FROM ratings WHERE user_id = ?");
